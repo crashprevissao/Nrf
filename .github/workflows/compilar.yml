@@ -25,22 +25,22 @@ jobs:
         python -m pip install --upgrade pip
         pip install -U platformio
 
-    - name: Preparar e Compilar o Projeto
+    - name: Preparar Estrutura e Compilar
       run: |
-        # Cria a pasta src dentro de nRFBox
+        # 1. Cria a pasta src dentro de nRFBox
         mkdir -p nRFBox/src
         
-        # Move TUDO que for código da raiz para a pasta src dentro de nRFBox
-        # Isso garante que, não importa onde você deixou, o compilador vai achar
+        # 2. Move todos os arquivos de código para o local correto
         find . -maxdepth 1 -name "*.cpp" -exec cp {} nRFBox/src/ \;
         find . -maxdepth 1 -name "*.h" -exec cp {} nRFBox/src/ \;
         find . -maxdepth 1 -name "*.ino" -exec cp {} nRFBox/src/ \;
         
-        # Copia o platformio.ini para dentro da nRFBox
-        cp platformio.ini nRFBox/
+        # 3. Garante que o platformio.ini esteja na pasta nRFBox
+        cp platformio.ini nRFBox/ 2>/dev/null || echo "platformio.ini já existe"
 
-        # Entra na pasta e compila
+        # 4. Entra na pasta nRFBox e instala bibliotecas antes de rodar
         cd nRFBox
+        pio lib install
         pio run
 
     - name: Guardar o arquivo compilado (.BIN)
