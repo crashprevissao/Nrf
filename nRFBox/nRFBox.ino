@@ -6,8 +6,7 @@
 #include "ícone.h"
 #include "setting.h"
 #include "config.h"
-[span_7](start_span)#include <ELECHOUSE_CC1101_SRC_DRV.h> // Inclui a biblioteca de controle do módulo CC1101[span_7](end_span)
-
+[span_7](start_span)#include <ELECHOUSE_CC1101_SRC_Arduino.h> // Inclui a biblioteca de controle do módulo CC1101 correta
 [span_8](start_span)extern uint8_t oledBrightness;[span_8](end_span)
 
 [span_9](start_span)// Aumentado o número de itens de 12 para 13 para acomodar o CC1101[span_9](end_span)
