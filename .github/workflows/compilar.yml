@@ -25,13 +25,13 @@ jobs:
         python -m pip install --upgrade pip
         pip install -U platformio
 
-    - name: Compilar o Projeto com PlatformIO
+    - name: Compilar o Projeto apontando para a pasta correta
       run: |
-        pio run
+        pio run --project-dir nRFBox -c ../platformio.ini
 
     - name: Guardar o arquivo compilado (.BIN)
       uses: actions/upload-artifact@v4
       with:
         name: nRFBox-Firmware
-        path: .pio/build/**/*.bin
+        path: nRFBox/.pio/build/**/*.bin
         
