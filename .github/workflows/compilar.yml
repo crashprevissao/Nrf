@@ -27,7 +27,7 @@ jobs:
 
       - name: Preparar e Compilar o Projeto
         run: |
-          # 1. Garante uma pasta de compilação totalmente isolada e limpa
+          # 1. Garante uma pasta temporária de compilação totalmente isolada e limpa
           rm -rf staging_dir
           mkdir -p staging_dir/src
           
@@ -40,7 +40,7 @@ jobs:
           cp *cone*.h icone.h 2>/dev/null || true
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
           
-          # 4. Localiza o arquivo .ino movido e converte com sucesso para main.cpp
+          # 4. Localiza o arquivo .ino movido e converte de vez para main.cpp
           LOCAL_INO=$(find . -maxdepth 1 -iname "*.ino" | head -n 1)
           if [ -n "$LOCAL_INO" ]; then
             echo "Convertendo com sucesso: $LOCAL_INO para main.cpp"
@@ -50,7 +50,7 @@ jobs:
           fi
           cd ../..
           
-          # 5. Cria o platformio.ini definitivo usando o repositório correto via lib_deps
+          # 5. Cria o platformio.ini com LDF ultra profundo e dependência correta
           cat << 'EOF' > staging_dir/platformio.ini
           [env:esp32dev]
           platform = espressif32
@@ -58,11 +58,14 @@ jobs:
           framework = arduino
           monitor_speed = 115200
           
+          # Força o buscador de bibliotecas a rastrear caminhos aninhados profundamente
+          lib_ldf_mode = deep+
+          
           lib_deps =
               olikraus/U8g2 @ ^2.36.18
               adafruit/Adafruit NeoPixel @ ^1.15.5
               nrf24/RF24 @ ^1.6.1
-              https://github.com/LSatan/SmartRC-CC1101-Driver-Lib.git
+              lsatan/SmartRC-CC1101-Driver-Lib @ ^2.5.7
           EOF
           
           # 6. Executa a compilação final isolada
