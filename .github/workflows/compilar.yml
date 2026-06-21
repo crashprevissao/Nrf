@@ -27,40 +27,37 @@ jobs:
 
       - name: Preparar e Compilar o Projeto
         run: |
-          # 1. Cria uma estrutura temporária para organizar a compilação limpa
+          # 1. Garante uma pasta temporária de compilação totalmente limpa
+          rm -rf staging_dir
           mkdir -p staging_dir/src
           
-          # 2. Busca e copia ABSOLUTAMENTE TODOS os arquivos de código (.cpp, .h, .ino) para a pasta temporária
-          # Isso junta arquivos espalhados em subpastas em um único lugar
+          # 2. Varre o repositório original buscando e copiando todos os arquivos de código (.cpp, .h, .ino)
           find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" -o -name "*.INO" \) -not -path "*/.pio/*" -not -path "*/staging_dir/*" -exec cp {} staging_dir/src/ \; 2>/dev/null || true
           
-          # 3. Baixa a biblioteca do CC1101 de forma isolada na pasta temporária
+          # 3. Baixa e descompacta a biblioteca SmartRC CC1101 usando caminhos absolutos e infalíveis
           mkdir -p cc1101_tmp
           curl -sSL https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/archive/refs/heads/master.tar.gz | tar -xzf - -C cc1101_tmp --strip-components=1
-          cp cc1101_tmp/*.cpp staging_dir/src/ 2>/dev/null || true
-          cp cc1101_tmp/*.h staging_dir/src/ 2>/dev/null || true
+          cp cc1101_tmp/ELECHOUSE_CC1101_SRC_Arduino.cpp staging_dir/src/ 2>/dev/null || true
+          cp cc1101_tmp/ELECHOUSE_CC1101_SRC_Arduino.h staging_dir/src/ 2>/dev/null || true
           rm -rf cc1101_tmp
           
-          # 4. Cria e força o arquivo icone.h correto baseado no conteúdo interno
+          # 4. Cria e força o arquivo icone.h sem acentos
           cd staging_dir/src
           find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
           cp *cone*.h icone.h 2>/dev/null || true
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
           
-          # 5. SOLUÇÃO COMPLETA: Localiza o arquivo .ino já movido para dentro de src e converte para main.cpp
+          # 5. Localiza o arquivo .ino movido e converte de vez para main.cpp
           LOCAL_INO=$(find . -maxdepth 1 -iname "*.ino" | head -n 1)
           if [ -n "$LOCAL_INO" ]; then
             echo "Convertendo com sucesso: $LOCAL_INO para main.cpp"
             echo '#include <Arduino.h>' > main.cpp
             cat "$LOCAL_INO" >> main.cpp
-            # Remove o arquivo .ino original para não duplicar funções no compilador
             rm "$LOCAL_INO"
-          else
-            echo "AVISO: Nenhum arquivo .ino foi encontrado!"
           fi
           cd ../..
           
-          # 6. Cria o arquivo de configuração platformio.ini na raiz da pasta temporária
+          # 6. Cria o platformio.ini blindado e sem conflitos
           cat << 'EOF' > staging_dir/platformio.ini
           [env:esp32dev]
           platform = espressif32
@@ -74,7 +71,7 @@ jobs:
               nrf24/RF24 @ ^1.6.1
           EOF
           
-          # 7. Executa a compilação final isolada de tudo
+          # 7. Executa a compilação final isolada
           cd staging_dir
           pio run
 
