@@ -27,13 +27,16 @@ jobs:
 
       - name: Preparar e Compilar o Projeto
         run: |
-          # 1. Garante que a pasta destino existe
+          # 1. Limpeza total de caches antigos antes de qualquer coisa
+          rm -rf nRFBox/.pio nRFBox/.platformio ~/.platformio
+          
+          # 2. Garante que a pasta destino existe
           mkdir -p nRFBox/src
           
-          # 2. Busca e copia TODOS os arquivos de código para nRFBox/src/
+          # 3. Busca e copia TODOS os arquivos de código para nRFBox/src/
           find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -not -path "*/.pio/*" -exec cp {} nRFBox/src/ \; 2>/dev/null || true
           
-          # 3. Força a criação do arquivo icone.h correto
+          # 4. Força a criação do arquivo icone.h correto
           cd nRFBox/src
           find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
           cp *cone*.h icone.h 2>/dev/null || true
@@ -42,7 +45,7 @@ jobs:
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
           cd ../..
           
-          # 4. Cria um platformio.ini limpo e com as dependências blindadas contra duplicidade
+          # 5. Cria um platformio.ini blindado usando o ID oficial do registro de bibliotecas
           cat << 'EOF' > nRFBox/platformio.ini
           [env:esp32dev]
           platform = espressif32
@@ -50,17 +53,15 @@ jobs:
           framework = arduino
           monitor_speed = 115200
           
-          # Força a busca correta e única das bibliotecas necessárias
           lib_deps =
               olikraus/U8g2 @ ^2.36.18
               adafruit/Adafruit NeoPixel @ ^1.15.5
               nrf24/RF24 @ ^1.6.1
-              https://github.com/LSatan/SmartRC-CC1101-Driver-Lib.git#v3.0.2
+              lsatan/SmartRC-CC1101-Driver-Lib @ ^2.5.7
           EOF
           
-          # 5. Executa a compilação de forma isolada
+          # 6. Executa a compilação
           cd nRFBox
-          rm -rf .pio
           pio run
 
       - name: Guardar o arquivo compilado (.BIN)
