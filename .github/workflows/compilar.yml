@@ -15,7 +15,7 @@ jobs:
       - name: Baixar o codigo do repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar o Python
+      - name: Configurar o Python Estavel
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
@@ -27,20 +27,23 @@ jobs:
 
       - name: Preparar e Compilar o Projeto
         run: |
-          # 1. Força a criação da pasta necessária
+          # 1. Garante que a pasta destino existe
           mkdir -p nRFBox/src
           
-          # 2. Copia os arquivos de código da raiz para a pasta correta (sem travar se algum não existir)
-          cp *.cpp nRFBox/src/ 2>/dev/null || true
-          cp *.h nRFBox/src/ 2>/dev/null || true
-          cp *.ino nRFBox/src/ 2>/dev/null || true
+          # 2. Busca e copia TODOS os arquivos de código de qualquer lugar para nRFBox/src/
+          # (Isso evita o erro de "Nada para compilar")
+          find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -not -path "*/.pio/*" -exec cp {} nRFBox/src/ \; 2>/dev/null || true
           
-          # 3. Move o arquivo de configuração obrigatório
+          # 3. Garante que o arquivo platformio.ini principal vá para a pasta nRFBox
           if [ -f "platformio.ini" ]; then
             cp platformio.ini nRFBox/
           fi
           
-          # 4. Entra e compila
+          # 4. Mostra o que tem na pasta para termos certeza antes de compilar
+          echo "=== Arquivos encontrados para compilar ==="
+          ls -la nRFBox/src/
+          
+          # 5. Entra na pasta e roda a compilação
           cd nRFBox
           pio run
 
