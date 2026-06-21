@@ -30,17 +30,17 @@ jobs:
           echo ">>> 1. Limpando ambiente..."
           rm -rf pio_workspace
           mkdir -p pio_workspace/src
-          
-          # A pasta lib/ resolve o problema dos includes com < >
           mkdir -p pio_workspace/lib/CC1101
           
           echo ">>> 2. Copiando código do projeto..."
           find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" -o -name "*.INO" \) -not -path "*/.pio/*" -not -path "*/pio_workspace/*" -exec cp {} pio_workspace/src/ \; 2>/dev/null || true
           
-          echo ">>> 3. Baixando e instalando CC1101 na pasta de bibliotecas locais (lib/)..."
+          echo ">>> 3. Instalando biblioteca e criando alias para o header do CC1101..."
           curl -sSL https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/archive/refs/tags/v2.5.7.tar.gz | tar -xzf - -C pio_workspace/lib/CC1101 --strip-components=1
+          # Cria um alias para satisfazer o include do seu código
+          echo '#include "ELECHOUSE_CC1101_SRC_DRV.h"' > pio_workspace/lib/CC1101/ELECHOUSE_CC1101_SRC_Arduino.h
           
-          echo ">>> 4. Convertendo INO para main.cpp ANTES de corrigir os textos..."
+          echo ">>> 4. Preparando main.cpp..."
           cd pio_workspace/src
           LOCAL_INO=$(find . -maxdepth 1 -iname "*.ino" | head -n 1)
           if [ -n "$LOCAL_INO" ]; then
@@ -49,27 +49,25 @@ jobs:
             rm "$LOCAL_INO"
           fi
           
-          echo ">>> 5. Blindando a inclusão do icone.h em todos os arquivos gerados..."
-          find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
-          cp *cone*.h icone.h 2>/dev/null || true
+          echo ">>> 5. Normalizando nomes de ícones (icon.h, icone.h)..."
+          # Identifica o header correto do ícone e cria cópias para todos os nomes possíveis
+          ICON_SRC=$(find . -maxdepth 1 -name "*cone*.h" -o -name "icon.h" | head -n 1)
+          if [ -n "$ICON_SRC" ]; then
+            cp "$ICON_SRC" icon.h
+            cp "$ICON_SRC" icone.h
+            cp "$ICON_SRC" "ícone.h" 2>/dev/null || true
+          fi
           
-          # Remove os acentos do código agora que o main.cpp já existe
-          sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
-          sed -i 's/<ícone.h>/<icone.h>/g' * 2>/dev/null || true
-          sed -i 's/"icon.h"/"icone.h"/g' * 2>/dev/null || true
           cd ../..
           
-          echo ">>> 6. Configurando platformio.ini com LDF Deep+..."
+          echo ">>> 6. Configurando platformio.ini..."
           cat << 'EOF' > pio_workspace/platformio.ini
           [env:esp32dev]
           platform = espressif32
           board = esp32dev
           framework = arduino
           monitor_speed = 115200
-          
-          # Força o compilador a escanear a pasta lib/ e seus arquivos locais até achar as dependências
           lib_ldf_mode = deep+
-          
           lib_deps =
               olikraus/U8g2 @ ^2.36.18
               adafruit/Adafruit NeoPixel @ ^1.15.5
