@@ -33,11 +33,12 @@ jobs:
           # 2. Busca e copia TODOS os arquivos de código de qualquer lugar para nRFBox/src/
           find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -not -path "*/.pio/*" -exec cp {} nRFBox/src/ \; 2>/dev/null || true
           
-          # 3. Força a criação do icone.h correto caso o arquivo original tenha acento
+          # 3. Força a descoberta do arquivo de ícone (mesmo que o Linux mude o caractere do acento)
           cd nRFBox/src
-          cp *cone.h icone.h 2>/dev/null || true
+          # Procura qualquer arquivo .h que termine com 'cone.h' ou que use caracteres especiais e copia como icone.h
+          find . -type f -name "*cone.h" -exec cp {} icone.h \; 2>/dev/null || true
           
-          # Substitui qualquer chamada interna remanescente no código para o nome sem acento
+          # Garante que as chamadas no código fiquem sem acento
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
           cd ../..
           
@@ -46,10 +47,11 @@ jobs:
             cp platformio.ini nRFBox/
           fi
           
-          # 5. Instala as bibliotecas que estão faltando (U8g2 e NeoPixel)
+          # 5. Instala todas as bibliotecas necessárias para o projeto
           cd nRFBox
           pio lib install "olikraus/U8g2"
           pio lib install "adafruit/Adafruit NeoPixel"
+          pio lib install "nrf24/RF24"
           
           # 6. Roda a compilação final
           pio run
