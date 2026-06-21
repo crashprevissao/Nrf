@@ -32,7 +32,7 @@ jobs:
           mkdir -p nRFBox/src
           
           # 2. Busca e copia TODOS os arquivos de código do seu repositório para nRFBox/src/
-          find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -not -path "*/.pio/*" -exec cp {} nRFBox/src/ \; 2>/dev/null || true
+          find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -not -path "*/.pio/*" -not -path "*/nRFBox/*" -exec cp {} nRFBox/src/ \; 2>/dev/null || true
           
           # 3. Baixa a biblioteca CC1101 e extrai os arquivos diretamente na pasta src/
           mkdir -p cc1101_tmp
@@ -49,12 +49,13 @@ jobs:
           # Garante que as chamadas no código fiquem sem acento
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
           
-          # 5. CORREÇÃO DO ERRO ATUAL: Transforma o .ino em um arquivo .cpp principal reconhecido pelo Linker
-          if [ -f "nRFBox.ino" ]; then
-            # Adiciona o include do Arduino no topo e joga o resto do arquivo para main.cpp
+          # 5. AJUSTE CRUCIAL: Localiza o arquivo .ino independentemente de maiúsculas/minúsculas e converte para main.cpp
+          INO_FILE=$(find . -maxdepth 1 -iname "*.ino" | head -n 1)
+          if [ -n "$INO_FILE" ]; then
+            echo "Convertendo arquivo principal: $INO_FILE"
             echo '#include <Arduino.h>' > main.cpp
-            cat nRFBox.ino >> main.cpp
-            rm nRFBox.ino
+            cat "$INO_FILE" >> main.cpp
+            rm "$INO_FILE"
           fi
           cd ../..
           
