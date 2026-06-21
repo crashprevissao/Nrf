@@ -30,38 +30,37 @@ jobs:
           # 1. Garante que a pasta destino existe
           mkdir -p nRFBox/src
           
-          # 2. Busca e copia TODOS os arquivos de código de qualquer lugar para nRFBox/src/
+          # 2. Busca e copia TODOS os arquivos de código para nRFBox/src/
           find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -not -path "*/.pio/*" -exec cp {} nRFBox/src/ \; 2>/dev/null || true
           
-          # 3. Força a criação do arquivo icone.h correto varrendo o conteúdo dos arquivos da pasta
+          # 3. Força a criação do arquivo icone.h correto
           cd nRFBox/src
           find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
           cp *cone*.h icone.h 2>/dev/null || true
           
-          # Garante que as chamadas no código fiquem padronizadas sem acento
+          # Garante que as chamadas no código fiquem sem acento
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
           cd ../..
           
-          # 4. Garante que o arquivo platformio.ini principal vá para a pasta nRFBox
-          if [ -f "platformio.ini" ]; then
-            cp platformio.ini nRFBox/
-          fi
+          # 4. Cria um platformio.ini limpo e com as dependências blindadas contra duplicidade
+          cat << 'EOF' > nRFBox/platformio.ini
+          [env:esp32dev]
+          platform = espressif32
+          board = esp32dev
+          framework = arduino
+          monitor_speed = 115200
           
-          # 5. Instala de forma limpa e isolada as bibliotecas exigidas
+          # Força a busca correta e única das bibliotecas necessárias
+          lib_deps =
+              olikraus/U8g2 @ ^2.36.18
+              adafruit/Adafruit NeoPixel @ ^1.15.5
+              nrf24/RF24 @ ^1.6.1
+              https://github.com/LSatan/SmartRC-CC1101-Driver-Lib.git#v3.0.2
+          EOF
+          
+          # 5. Executa a compilação de forma isolada
           cd nRFBox
-          
-          # Remove instalações locais duplicadas para evitar conflito de versão
-          rm -rf .pio/libdeps
-          
-          # Instala cada uma de forma direta
-          pio lib install "olikraus/U8g2"
-          pio lib install "adafruit/Adafruit NeoPixel"
-          pio lib install "nrf24/RF24"
-          
-          # Força o PlatformIO a usar explicitamente a URL do repositório Git do CC1101
-          pio lib install "https://github.com/LSatan/SmartRC-CC1101-Driver-Lib.git#v3.0.2"
-          
-          # 6. Roda a compilação final
+          rm -rf .pio
           pio run
 
       - name: Guardar o arquivo compilado (.BIN)
