@@ -27,12 +27,11 @@ jobs:
 
     - name: Compilar o Projeto com PlatformIO
       run: |
-        cd nRFBox
         pio run
 
     - name: Guardar o arquivo compilado (.BIN)
       uses: actions/upload-artifact@v4
       with:
         name: nRFBox-Firmware
-        path: nRFBox/.pio/build/esp32dev/firmware.bin
+        path: .pio/build/esp32dev/firmware.bin
         
