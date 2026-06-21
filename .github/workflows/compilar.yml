@@ -27,8 +27,7 @@ jobs:
 
       - name: Preparar e Compilar o Projeto
         run: |
-          # 1. Localiza onde está a pasta real do seu projeto (onde fica o .ino)
-          # Ele procura o arquivo .ino e pega o diretório em que ele habita.
+          # 1. Localiza onde está o seu arquivo .ino no repositório original
           INO_PATH=$(find . -type f -iname "*.ino" -not -path "*/.pio/*" | head -n 1)
           
           if [ -z "$INO_PATH" ]; then
@@ -36,53 +35,40 @@ jobs:
             exit 1
           fi
           
-          PROJECT_DIR=$(dirname "$INO_PATH")
-          echo "Diretório do projeto detectado: $PROJECT_DIR"
+          ORIGINAL_DIR=$(dirname "$INO_PATH")
+          echo "Diretório detectado: $ORIGINAL_DIR"
           
-          # 2. Garante que a pasta interna de código se chame obrigatoriamente 'src'
-          # O PlatformIO exige que os códigos fiquem dentro de uma pasta chamada 'src'.
-          # Se o seu arquivo .ino estiver solto ou em outra pasta, nós normalizamos isso.
-          cd "$PROJECT_DIR"
-          if [ "$(basename "$PWD")" != "src" ]; then
-            if [ -d "src" ]; then
-              echo "Pasta src já existe."
-            else
-              echo "Criando pasta src e movendo os códigos..."
-              mkdir -p src
-              # Move arquivos de código do nível atual para dentro de src
-              find . -maxdepth 1 -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -exec mv {} src/ \; 2>/dev/null || true
-              cd src
-            fi
-          fi
+          # 2. Cria uma estrutura de compilação totalmente isolada e limpa na raiz do runner
+          rm -rf workspace_build
+          mkdir -p workspace_build/src
           
-          # Agora estamos garantidamente dentro da pasta onde os códigos estão acumulados
-          # 3. Força a criação do arquivo icone.h correto sem acentos
+          # 3. Copia TODOS os arquivos de código (.cpp, .h, .ino) de forma plana para a pasta limpa
+          find "$ORIGINAL_DIR" -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" -o -name "*.INO" \) -exec cp {} workspace_build/src/ \; 2>/dev/null || true
+          
+          # 4. Cria e força o arquivo icone.h correto sem acentos na pasta definitiva
+          cd workspace_build/src
           find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
           cp *cone*.h icone.h 2>/dev/null || true
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
           
-          # 4. Converte o arquivo .ino local em main.cpp para o compilador não falhar no Linker
+          # 5. Converte com segurança o arquivo .ino local para main.cpp (Evita erro de setup/loop)
           LOCAL_INO=$(find . -maxdepth 1 -iname "*.ino" | head -n 1)
           if [ -n "$LOCAL_INO" ]; then
-            echo "Convertendo: $LOCAL_INO para main.cpp"
             echo '#include <Arduino.h>' > main.cpp
             cat "$LOCAL_INO" >> main.cpp
             rm "$LOCAL_INO"
           fi
-          
-          # Voltar para a raiz do diretório do projeto (onde deve ficar o platformio.ini)
           cd ..
-          if [ "$(basename "$PWD")" = "src" ]; then
-            cd ..
-          fi
           
-          # 5. Sobrescreve/Cria o platformio.ini perfeito com LDF profundo neste local exato
+          # 6. Cria o platformio.ini blindado e configurado com busca ultra profunda (LDF)
           cat << 'EOF' > platformio.ini
           [env:esp32dev]
           platform = espressif32
           board = esp32dev
           framework = arduino
           monitor_speed = 115200
+          
+          # Força o compilador a escanear de forma agressiva dependências internas em cascata
           lib_ldf_mode = deep+
           
           lib_deps =
@@ -92,19 +78,18 @@ jobs:
               lsatan/SmartRC-CC1101-Driver-Lib @ ^2.5.7
           EOF
           
-          echo "Estrutura pronta para compilação. Arquivos na pasta atual:"
-          ls -la
-          ls -la src/
+          # 7. EXECUTOR SEGURO: Força a pré-instalação manual das dependências antes de compilar
+          pio pkg install
           
-          # 6. Roda a compilação nativa no diretório correto
+          # 8. Roda a compilação final isolada
           pio run
           
-          # Guarda o caminho do arquivo gerado para o upload do artefato
-          echo "BIN_PATH=$(pwd)/.pio/build/esp32dev/firmware.bin" >> $GITHUB_ENV
+          # Exporta o caminho do arquivo compilado para o gerador de artefatos
+          echo "FIRMWARE_BIN=$(pwd)/.pio/build/esp32dev/firmware.bin" >> $GITHUB_ENV
 
       - name: Guardar o arquivo compilado (.BIN)
         uses: actions/upload-artifact@v4
         with:
           name: nRFBox-Firmware
-          path: ${{ env.BIN_PATH }}
+          path: ${{ env.FIRMWARE_BIN }}
           
