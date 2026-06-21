@@ -34,7 +34,7 @@ jobs:
           # 2. Busca e copia TODOS os arquivos de código do seu repositório para nRFBox/src/
           find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -not -path "*/.pio/*" -exec cp {} nRFBox/src/ \; 2>/dev/null || true
           
-          # 3. Baixa a biblioteca CC1101 e extrai os arquivos diretamente na pasta src/ para evitar erros de busca
+          # 3. Baixa a biblioteca CC1101 e extrai os arquivos diretamente na pasta src/
           mkdir -p cc1101_tmp
           curl -sSL https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/archive/refs/heads/master.tar.gz | tar -xzf - -C cc1101_tmp --strip-components=1
           cp cc1101_tmp/*.cpp nRFBox/src/ 2>/dev/null || true
@@ -48,9 +48,17 @@ jobs:
           
           # Garante que as chamadas no código fiquem sem acento
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
+          
+          # 5. CORREÇÃO DO ERRO ATUAL: Transforma o .ino em um arquivo .cpp principal reconhecido pelo Linker
+          if [ -f "nRFBox.ino" ]; then
+            # Adiciona o include do Arduino no topo e joga o resto do arquivo para main.cpp
+            echo '#include <Arduino.h>' > main.cpp
+            cat nRFBox.ino >> main.cpp
+            rm nRFBox.ino
+          fi
           cd ../..
           
-          # 5. Cria um platformio.ini limpo apenas com as demais bibliotecas padrões
+          # 6. Cria um platformio.ini limpo apenas com as demais bibliotecas padrões
           cat << 'EOF' > nRFBox/platformio.ini
           [env:esp32dev]
           platform = espressif32
@@ -64,7 +72,7 @@ jobs:
               nrf24/RF24 @ ^1.6.1
           EOF
           
-          # 6. Executa a compilação de forma isolada
+          # 7. Executa a compilação final
           cd nRFBox
           pio run
 
