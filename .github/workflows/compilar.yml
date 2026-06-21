@@ -27,7 +27,17 @@ jobs:
 
     - name: Preparar e Compilar o Projeto
       run: |
+        # Corrige o problema da pasta 'src' estar na raiz:
+        # Cria a pasta src dentro de nRFBox caso ela nao exista
+        mkdir -p nRFBox/src
+        
+        # Move todos os arquivos de codigo da raiz para dentro de nRFBox/src/
+        cp -r src/* nRFBox/src/
+        
+        # Garante que o arquivo platformio.ini principal va para a pasta certa
         cp platformio.ini nRFBox/
+
+        # Entra na pasta e roda a compilacao
         cd nRFBox
         pio run
 
