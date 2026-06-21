@@ -33,12 +33,16 @@ jobs:
           # 2. Busca e copia TODOS os arquivos de código de qualquer lugar para nRFBox/src/
           find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -not -path "*/.pio/*" -exec cp {} nRFBox/src/ \; 2>/dev/null || true
           
-          # 3. Força a descoberta do arquivo de ícone (mesmo que o Linux mude o caractere do acento)
+          # 3. Força a criação do arquivo icone.h correto varrendo o conteúdo dos arquivos da pasta
           cd nRFBox/src
-          # Procura qualquer arquivo .h que termine com 'cone.h' ou que use caracteres especiais e copia como icone.h
-          find . -type f -name "*cone.h" -exec cp {} icone.h \; 2>/dev/null || true
           
-          # Garante que as chamadas no código fiquem sem acento
+          # Procura por arquivos que contenham dados de imagem típicos ou o nome aproximado e copia como icone.h
+          find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
+          
+          # Caso não encontre pelo conteúdo, tenta mapear por correspondência parcial de caracteres ocultos
+          cp *cone*.h icone.h 2>/dev/null || true
+          
+          # Garante que as chamadas no código fiquem padronizadas sem acento
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
           cd ../..
           
@@ -52,6 +56,7 @@ jobs:
           pio lib install "olikraus/U8g2"
           pio lib install "adafruit/Adafruit NeoPixel"
           pio lib install "nrf24/RF24"
+          pio lib install "SmartRC-CC1101-Driver-Lib"
           
           # 6. Roda a compilação final
           pio run
