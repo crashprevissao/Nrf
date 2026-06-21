@@ -35,11 +35,7 @@ jobs:
           
           # 3. Força a criação do arquivo icone.h correto varrendo o conteúdo dos arquivos da pasta
           cd nRFBox/src
-          
-          # Procura por arquivos que contenham dados de imagem típicos ou o nome aproximado e copia como icone.h
           find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
-          
-          # Caso não encontre pelo conteúdo, tenta mapear por correspondência parcial de caracteres ocultos
           cp *cone*.h icone.h 2>/dev/null || true
           
           # Garante que as chamadas no código fiquem padronizadas sem acento
@@ -51,12 +47,12 @@ jobs:
             cp platformio.ini nRFBox/
           fi
           
-          # 5. Instala todas as bibliotecas necessárias para o projeto
+          # 5. Instala todas as bibliotecas necessárias para o projeto (incluindo o CC1101 correto)
           cd nRFBox
           pio lib install "olikraus/U8g2"
           pio lib install "adafruit/Adafruit NeoPixel"
           pio lib install "nrf24/RF24"
-          pio lib install "SmartRC-CC1101-Driver-Lib"
+          pio lib install "https://github.com/LSatan/SmartRC-CC1101-Driver-Lib.git"
           
           # 6. Roda a compilação final
           pio run
