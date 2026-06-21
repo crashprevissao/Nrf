@@ -27,50 +27,84 @@ jobs:
 
       - name: Preparar e Compilar o Projeto
         run: |
-          # 1. Garante que a pasta destino existe e está limpa
-          rm -rf nRFBox
-          mkdir -p nRFBox/src
+          # 1. Localiza onde está a pasta real do seu projeto (onde fica o .ino)
+          # Ele procura o arquivo .ino e pega o diretório em que ele habita.
+          INO_PATH=$(find . -type f -iname "*.ino" -not -path "*/.pio/*" | head -n 1)
           
-          # 2. Busca e copia TODOS os arquivos de código do seu repositório para nRFBox/src/
-          find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -not -path "*/.pio/*" -exec cp {} nRFBox/src/ \; 2>/dev/null || true
+          if [ -z "$INO_PATH" ]; then
+            echo "ERRO CRÍTICO: Nenhum arquivo .ino encontrado no repositório!"
+            exit 1
+          fi
           
-          # 3. Baixa a biblioteca CC1101 e extrai os arquivos diretamente na pasta src/ para evitar erros de busca
-          mkdir -p cc1101_tmp
-          curl -sSL https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/archive/refs/heads/master.tar.gz | tar -xzf - -C cc1101_tmp --strip-components=1
-          cp cc1101_tmp/*.cpp nRFBox/src/ 2>/dev/null || true
-          cp cc1101_tmp/*.h nRFBox/src/ 2>/dev/null || true
-          rm -rf cc1101_tmp
+          PROJECT_DIR=$(dirname "$INO_PATH")
+          echo "Diretório do projeto detectado: $PROJECT_DIR"
           
-          # 4. Força a criação do arquivo icone.h correto
-          cd nRFBox/src
+          # 2. Garante que a pasta interna de código se chame obrigatoriamente 'src'
+          # O PlatformIO exige que os códigos fiquem dentro de uma pasta chamada 'src'.
+          # Se o seu arquivo .ino estiver solto ou em outra pasta, nós normalizamos isso.
+          cd "$PROJECT_DIR"
+          if [ "$(basename "$PWD")" != "src" ]; then
+            if [ -d "src" ]; then
+              echo "Pasta src já existe."
+            else
+              echo "Criando pasta src e movendo os códigos..."
+              mkdir -p src
+              # Move arquivos de código do nível atual para dentro de src
+              find . -maxdepth 1 -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -exec mv {} src/ \; 2>/dev/null || true
+              cd src
+            fi
+          fi
+          
+          # Agora estamos garantidamente dentro da pasta onde os códigos estão acumulados
+          # 3. Força a criação do arquivo icone.h correto sem acentos
           find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
           cp *cone*.h icone.h 2>/dev/null || true
-          
-          # Garante que as chamadas no código fiquem sem acento
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
-          cd ../..
           
-          # 5. Cria um platformio.ini limpo apenas com as demais bibliotecas padrões
-          cat << 'EOF' > nRFBox/platformio.ini
+          # 4. Converte o arquivo .ino local em main.cpp para o compilador não falhar no Linker
+          LOCAL_INO=$(find . -maxdepth 1 -iname "*.ino" | head -n 1)
+          if [ -n "$LOCAL_INO" ]; then
+            echo "Convertendo: $LOCAL_INO para main.cpp"
+            echo '#include <Arduino.h>' > main.cpp
+            cat "$LOCAL_INO" >> main.cpp
+            rm "$LOCAL_INO"
+          fi
+          
+          # Voltar para a raiz do diretório do projeto (onde deve ficar o platformio.ini)
+          cd ..
+          if [ "$(basename "$PWD")" = "src" ]; then
+            cd ..
+          fi
+          
+          # 5. Sobrescreve/Cria o platformio.ini perfeito com LDF profundo neste local exato
+          cat << 'EOF' > platformio.ini
           [env:esp32dev]
           platform = espressif32
           board = esp32dev
           framework = arduino
           monitor_speed = 115200
+          lib_ldf_mode = deep+
           
           lib_deps =
               olikraus/U8g2 @ ^2.36.18
               adafruit/Adafruit NeoPixel @ ^1.15.5
               nrf24/RF24 @ ^1.6.1
+              lsatan/SmartRC-CC1101-Driver-Lib @ ^2.5.7
           EOF
           
-          # 6. Executa a compilação de forma isolada
-          cd nRFBox
+          echo "Estrutura pronta para compilação. Arquivos na pasta atual:"
+          ls -la
+          ls -la src/
+          
+          # 6. Roda a compilação nativa no diretório correto
           pio run
+          
+          # Guarda o caminho do arquivo gerado para o upload do artefato
+          echo "BIN_PATH=$(pwd)/.pio/build/esp32dev/firmware.bin" >> $GITHUB_ENV
 
       - name: Guardar o arquivo compilado (.BIN)
         uses: actions/upload-artifact@v4
         with:
           name: nRFBox-Firmware
-          path: nRFBox/.pio/build/**/*.bin
+          path: ${{ env.BIN_PATH }}
           
