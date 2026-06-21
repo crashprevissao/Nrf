@@ -47,12 +47,19 @@ jobs:
             cp platformio.ini nRFBox/
           fi
           
-          # 5. Instala todas as bibliotecas necessárias para o projeto (incluindo o CC1101 correto)
+          # 5. Instala de forma limpa e isolada as bibliotecas exigidas
           cd nRFBox
+          
+          # Remove instalações locais duplicadas para evitar conflito de versão
+          rm -rf .pio/libdeps
+          
+          # Instala cada uma de forma direta
           pio lib install "olikraus/U8g2"
           pio lib install "adafruit/Adafruit NeoPixel"
           pio lib install "nrf24/RF24"
-          pio lib install "https://github.com/LSatan/SmartRC-CC1101-Driver-Lib.git"
+          
+          # Força o PlatformIO a usar explicitamente a URL do repositório Git do CC1101
+          pio lib install "https://github.com/LSatan/SmartRC-CC1101-Driver-Lib.git#v3.0.2"
           
           # 6. Roda a compilação final
           pio run
