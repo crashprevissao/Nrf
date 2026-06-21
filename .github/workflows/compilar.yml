@@ -42,44 +42,47 @@ jobs:
           rm -rf workspace_build
           mkdir -p workspace_build/src
           
-          # 3. Copia TODOS os arquivos de código (.cpp, .h, .ino) de forma plana para a pasta limpa
+          # 3. Copia TODOS os arquivos de código (.cpp, .h, .ino) do seu projeto para a pasta limpa
           find "$ORIGINAL_DIR" -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" -o -name "*.INO" \) -exec cp {} workspace_build/src/ \; 2>/dev/null || true
           
-          # 4. Cria e força o arquivo icone.h correto sem acentos na pasta definitiva
+          # 4. INJEÇÃO DIRETA DA BIBLIOTECA CC1101 (Garante que o arquivo estará lá!)
+          echo "Baixando e injetando a biblioteca CC1101 diretamente no código fonte..."
+          mkdir -p cc1101_tmp
+          curl -sSL https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/archive/refs/tags/v2.5.7.tar.gz | tar -xzf - -C cc1101_tmp --strip-components=1
+          cp cc1101_tmp/ELECHOUSE_CC1101_SRC_Arduino.cpp workspace_build/src/
+          cp cc1101_tmp/ELECHOUSE_CC1101_SRC_Arduino.h workspace_build/src/
+          rm -rf cc1101_tmp
+          
+          # 5. Cria e força o arquivo icone.h correto sem acentos na pasta definitiva
           cd workspace_build/src
           find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
           cp *cone*.h icone.h 2>/dev/null || true
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
           
-          # 5. Converte com segurança o arquivo .ino local para main.cpp (Evita erro de setup/loop)
+          # 6. Converte com segurança o arquivo .ino local para main.cpp (Evita erro de setup/loop)
           LOCAL_INO=$(find . -maxdepth 1 -iname "*.ino" | head -n 1)
           if [ -n "$LOCAL_INO" ]; then
+            echo "Convertendo .ino para main.cpp"
             echo '#include <Arduino.h>' > main.cpp
             cat "$LOCAL_INO" >> main.cpp
             rm "$LOCAL_INO"
           fi
           cd ..
           
-          # 6. Cria o platformio.ini blindado e configurado com busca ultra profunda (LDF)
+          # 7. Cria o platformio.ini blindado (Apenas com as outras dependências necessárias)
           cat << 'EOF' > platformio.ini
           [env:esp32dev]
           platform = espressif32
           board = esp32dev
           framework = arduino
           monitor_speed = 115200
-          
-          # Força o compilador a escanear de forma agressiva dependências internas em cascata
           lib_ldf_mode = deep+
           
           lib_deps =
               olikraus/U8g2 @ ^2.36.18
               adafruit/Adafruit NeoPixel @ ^1.15.5
               nrf24/RF24 @ ^1.6.1
-              lsatan/SmartRC-CC1101-Driver-Lib @ ^2.5.7
           EOF
-          
-          # 7. EXECUTOR SEGURO: Força a pré-instalação manual das dependências antes de compilar
-          pio pkg install
           
           # 8. Roda a compilação final isolada
           pio run
