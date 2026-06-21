@@ -30,17 +30,13 @@ jobs:
           echo ">>> 1. Limpando ambiente..."
           rm -rf pio_workspace
           mkdir -p pio_workspace/src
-          mkdir -p pio_workspace/lib/CC1101
           
           echo ">>> 2. Copiando código do projeto..."
           find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" -o -name "*.INO" \) -not -path "*/.pio/*" -not -path "*/pio_workspace/*" -exec cp {} pio_workspace/src/ \; 2>/dev/null || true
           
-          echo ">>> 3. Instalando biblioteca e criando alias para o header do CC1101..."
-          curl -sSL https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/archive/refs/tags/v2.5.7.tar.gz | tar -xzf - -C pio_workspace/lib/CC1101 --strip-components=1
-          # Cria um alias para satisfazer o include do seu código
-          echo '#include "ELECHOUSE_CC1101_SRC_DRV.h"' > pio_workspace/lib/CC1101/ELECHOUSE_CC1101_SRC_Arduino.h
+          echo ">>> 3. Etapa de download manual desativada para evitar conflitos."
           
-          echo ">>> 4. Preparando main.cpp..."
+          echo ">>> 4. Normalizando ficheiro principal..."
           cd pio_workspace/src
           LOCAL_INO=$(find . -maxdepth 1 -iname "*.ino" | head -n 1)
           if [ -n "$LOCAL_INO" ]; then
@@ -50,7 +46,6 @@ jobs:
           fi
           
           echo ">>> 5. Normalizando nomes de ícones (icon.h, icone.h)..."
-          # Identifica o header correto do ícone e cria cópias para todos os nomes possíveis
           ICON_SRC=$(find . -maxdepth 1 -name "*cone*.h" -o -name "icon.h" | head -n 1)
           if [ -n "$ICON_SRC" ]; then
             cp "$ICON_SRC" icon.h
@@ -72,6 +67,7 @@ jobs:
               olikraus/U8g2 @ ^2.36.18
               adafruit/Adafruit NeoPixel @ ^1.15.5
               nrf24/RF24 @ ^1.6.1
+              elechouse/Elechouse CC1101 @ ^1.7.9
           EOF
           
           echo ">>> 7. Compilando..."
@@ -79,10 +75,4 @@ jobs:
           pio run
           
           echo "BIN_PATH=$(pwd)/.pio/build/esp32dev/firmware.bin" >> $GITHUB_ENV
-
-      - name: Guardar o arquivo compilado (.BIN)
-        uses: actions/upload-artifact@v4
-        with:
-          name: nRFBox-Firmware
-          path: ${{ env.BIN_PATH }}
           
