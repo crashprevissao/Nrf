@@ -27,14 +27,19 @@ jobs:
 
       - name: Preparar e Compilar o Projeto
         run: |
-          # 1. Limpeza total de caches antigos antes de qualquer coisa
-          rm -rf nRFBox/.pio nRFBox/.platformio ~/.platformio
-          
-          # 2. Garante que a pasta destino existe
+          # 1. Garante que a pasta destino existe e está limpa
+          rm -rf nRFBox
           mkdir -p nRFBox/src
           
-          # 3. Busca e copia TODOS os arquivos de código para nRFBox/src/
+          # 2. Busca e copia TODOS os arquivos de código do seu repositório para nRFBox/src/
           find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -not -path "*/.pio/*" -exec cp {} nRFBox/src/ \; 2>/dev/null || true
+          
+          # 3. Baixa a biblioteca CC1101 e extrai os arquivos diretamente na pasta src/ para evitar erros de busca
+          mkdir -p cc1101_tmp
+          curl -sSL https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/archive/refs/heads/master.tar.gz | tar -xzf - -C cc1101_tmp --strip-components=1
+          cp cc1101_tmp/*.cpp nRFBox/src/ 2>/dev/null || true
+          cp cc1101_tmp/*.h nRFBox/src/ 2>/dev/null || true
+          rm -rf cc1101_tmp
           
           # 4. Força a criação do arquivo icone.h correto
           cd nRFBox/src
@@ -45,7 +50,7 @@ jobs:
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
           cd ../..
           
-          # 5. Cria um platformio.ini blindado usando o ID oficial do registro de bibliotecas
+          # 5. Cria um platformio.ini limpo apenas com as demais bibliotecas padrões
           cat << 'EOF' > nRFBox/platformio.ini
           [env:esp32dev]
           platform = espressif32
@@ -57,10 +62,9 @@ jobs:
               olikraus/U8g2 @ ^2.36.18
               adafruit/Adafruit NeoPixel @ ^1.15.5
               nrf24/RF24 @ ^1.6.1
-              lsatan/SmartRC-CC1101-Driver-Lib @ ^2.5.7
           EOF
           
-          # 6. Executa a compilação
+          # 6. Executa a compilação de forma isolada
           cd nRFBox
           pio run
 
