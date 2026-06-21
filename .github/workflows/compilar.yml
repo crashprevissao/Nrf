@@ -27,72 +27,80 @@ jobs:
 
       - name: Preparar e Compilar o Projeto
         run: |
-          # 1. Localiza onde está o seu arquivo .ino no repositório original
+          # 1. Localiza o arquivo .ino original no seu repositório
           INO_PATH=$(find . -type f -iname "*.ino" -not -path "*/.pio/*" | head -n 1)
           
           if [ -z "$INO_PATH" ]; then
-            echo "ERRO CRÍTICO: Nenhum arquivo .ino encontrado no repositório!"
+            echo "ERRO CRÍTICO: Nenhum arquivo .ino encontrado!"
             exit 1
           fi
           
-          ORIGINAL_DIR=$(dirname "$INO_PATH")
-          echo "Diretório detectado: $ORIGINAL_DIR"
+          PROJECT_DIR=$(dirname "$INO_PATH")
+          echo "Diretório do projeto detectado: $PROJECT_DIR"
+          cd "$PROJECT_DIR"
           
-          # 2. Cria uma estrutura de compilação totalmente isolada e limpa na raiz do runner
-          rm -rf workspace_build
-          mkdir -p workspace_build/src
+          # 2. Normaliza a estrutura para o padrão do PlatformIO (pasta src)
+          if [ "$(basename "$PWD")" != "src" ]; then
+            if [ ! -d "src" ]; then
+              mkdir -p src
+              find . -maxdepth 1 -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -exec mv {} src/ \; 2>/dev/null || true
+            fi
+            cd src
+          fi
           
-          # 3. Copia TODOS os arquivos de código (.cpp, .h, .ino) do seu projeto para a pasta limpa
-          find "$ORIGINAL_DIR" -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" -o -name "*.INO" \) -exec cp {} workspace_build/src/ \; 2>/dev/null || true
-          
-          # 4. INJEÇÃO DIRETA DA BIBLIOTECA CC1101 (Garante que o arquivo estará lá!)
-          echo "Baixando e injetando a biblioteca CC1101 diretamente no código fonte..."
-          mkdir -p cc1101_tmp
-          curl -sSL https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/archive/refs/tags/v2.5.7.tar.gz | tar -xzf - -C cc1101_tmp --strip-components=1
-          cp cc1101_tmp/ELECHOUSE_CC1101_SRC_Arduino.cpp workspace_build/src/
-          cp cc1101_tmp/ELECHOUSE_CC1101_SRC_Arduino.h workspace_build/src/
-          rm -rf cc1101_tmp
-          
-          # 5. Cria e força o arquivo icone.h correto sem acentos na pasta definitiva
-          cd workspace_build/src
+          # 3. Corrige o arquivo icone.h (remover acentos)
           find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
           cp *cone*.h icone.h 2>/dev/null || true
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
           
-          # 6. Converte com segurança o arquivo .ino local para main.cpp (Evita erro de setup/loop)
+          # 4. Converte o .ino para main.cpp e INJETA o cabeçalho do CC1101
+          # Isso força o PlatformIO a indexar a biblioteca logo no início da compilação
           LOCAL_INO=$(find . -maxdepth 1 -iname "*.ino" | head -n 1)
           if [ -n "$LOCAL_INO" ]; then
-            echo "Convertendo .ino para main.cpp"
+            echo "Convertendo $LOCAL_INO para main.cpp com injeção de dependência..."
             echo '#include <Arduino.h>' > main.cpp
+            echo '#include <ELECHOUSE_CC1101_SRC_Arduino.h>' >> main.cpp
             cat "$LOCAL_INO" >> main.cpp
             rm "$LOCAL_INO"
           fi
-          cd ..
           
-          # 7. Cria o platformio.ini blindado (Apenas com as outras dependências necessárias)
+          # Volta para a raiz do projeto (onde o platformio.ini deve ficar)
+          cd ..
+          if [ "$(basename "$PWD")" = "src" ]; then
+            cd ..
+          fi
+          
+          # 5. Cria o platformio.ini com modo de busca profunda agressivo (chain+)
           cat << 'EOF' > platformio.ini
           [env:esp32dev]
           platform = espressif32
           board = esp32dev
           framework = arduino
           monitor_speed = 115200
-          lib_ldf_mode = deep+
+          
+          # Modo de busca profunda que força o escaneamento de todas as bibliotecas do projeto
+          lib_ldf_mode = chain+
           
           lib_deps =
               olikraus/U8g2 @ ^2.36.18
               adafruit/Adafruit NeoPixel @ ^1.15.5
               nrf24/RF24 @ ^1.6.1
+              lsatan/SmartRC-CC1101-Driver-Lib @ ^2.5.7
           EOF
           
-          # 8. Roda a compilação final isolada
+          echo "Estrutura de arquivos pronta:"
+          ls -la
+          ls -la src/
+          
+          # 6. Executa a compilação oficial
           pio run
           
-          # Exporta o caminho do arquivo compilado para o gerador de artefatos
-          echo "FIRMWARE_BIN=$(pwd)/.pio/build/esp32dev/firmware.bin" >> $GITHUB_ENV
+          # Salva o caminho do binário gerado
+          echo "BIN_PATH=$(pwd)/.pio/build/esp32dev/firmware.bin" >> $GITHUB_ENV
 
       - name: Guardar o arquivo compilado (.BIN)
         uses: actions/upload-artifact@v4
         with:
           name: nRFBox-Firmware
-          path: ${{ env.FIRMWARE_BIN }}
+          path: ${{ env.BIN_PATH }}
           
