@@ -27,37 +27,41 @@ jobs:
 
       - name: Preparar e Compilar o Projeto
         run: |
-          # 1. Limpeza total de pastas antigas para evitar lixo de build
-          rm -rf nRFBox
-          mkdir -p nRFBox/src
+          # 1. Cria uma estrutura temporária para organizar a compilação limpa
+          mkdir -p staging_dir/src
           
-          # 2. Descobre onde está o seu arquivo .ino em qualquer lugar do repositório
-          INO_PATH=$(find . -type f -name "*.ino" -o -name "*.INO" | head -n 1)
-          echo "Arquivo principal detectado em: $INO_PATH"
+          # 2. Busca e copia ABSOLUTAMENTE TODOS os arquivos de código (.cpp, .h, .ino) para a pasta temporária
+          # Isso junta arquivos espalhados em subpastas em um único lugar
+          find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" -o -name "*.INO" \) -not -path "*/.pio/*" -not -path "*/staging_dir/*" -exec cp {} staging_dir/src/ \; 2>/dev/null || true
           
-          # 3. Cria o main.cpp correto injetando o cabeçalho do Arduino e o código completo do .ino
-          echo '#include <Arduino.h>' > nRFBox/src/main.cpp
-          cat "$INO_PATH" >> nRFBox/src/main.cpp
-          
-          # 4. Copia todos os outros arquivos .cpp e .h (exceto o próprio .ino e a pasta de destino)
-          find . -type f \( -name "*.cpp" -o -name "*.h" \) -not -path "*/.pio/*" -not -path "*/nRFBox/*" -exec cp {} nRFBox/src/ \; 2>/dev/null || true
-          
-          # 5. Instala a biblioteca do CC1101 de forma isolada na pasta src
+          # 3. Baixa a biblioteca do CC1101 de forma isolada na pasta temporária
           mkdir -p cc1101_tmp
           curl -sSL https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/archive/refs/heads/master.tar.gz | tar -xzf - -C cc1101_tmp --strip-components=1
-          cp cc1101_tmp/*.cpp nRFBox/src/ 2>/dev/null || true
-          cp cc1101_tmp/*.h nRFBox/src/ 2>/dev/null || true
+          cp cc1101_tmp/*.cpp staging_dir/src/ 2>/dev/null || true
+          cp cc1101_tmp/*.h staging_dir/src/ 2>/dev/null || true
           rm -rf cc1101_tmp
           
-          # 6. Força a criação do arquivo icone.h correto e ajusta os acentos
-          cd nRFBox/src
+          # 4. Cria e força o arquivo icone.h correto baseado no conteúdo interno
+          cd staging_dir/src
           find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
           cp *cone*.h icone.h 2>/dev/null || true
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
+          
+          # 5. SOLUÇÃO COMPLETA: Localiza o arquivo .ino já movido para dentro de src e converte para main.cpp
+          LOCAL_INO=$(find . -maxdepth 1 -iname "*.ino" | head -n 1)
+          if [ -n "$LOCAL_INO" ]; then
+            echo "Convertendo com sucesso: $LOCAL_INO para main.cpp"
+            echo '#include <Arduino.h>' > main.cpp
+            cat "$LOCAL_INO" >> main.cpp
+            # Remove o arquivo .ino original para não duplicar funções no compilador
+            rm "$LOCAL_INO"
+          else
+            echo "AVISO: Nenhum arquivo .ino foi encontrado!"
+          fi
           cd ../..
           
-          # 7. Cria o platformio.ini blindado e sem conflitos
-          cat << 'EOF' > nRFBox/platformio.ini
+          # 6. Cria o arquivo de configuração platformio.ini na raiz da pasta temporária
+          cat << 'EOF' > staging_dir/platformio.ini
           [env:esp32dev]
           platform = espressif32
           board = esp32dev
@@ -70,13 +74,13 @@ jobs:
               nrf24/RF24 @ ^1.6.1
           EOF
           
-          # 8. Executa a compilação final
-          cd nRFBox
+          # 7. Executa a compilação final isolada de tudo
+          cd staging_dir
           pio run
 
       - name: Guardar o arquivo compilado (.BIN)
         uses: actions/upload-artifact@v4
         with:
           name: nRFBox-Firmware
-          path: nRFBox/.pio/build/**/*.bin
+          path: staging_dir/.pio/build/**/*.bin
           
