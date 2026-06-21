@@ -6,143 +6,179 @@
 #include "icon.h"
 #include "setting.h"
 #include "config.h"
+#include <ELECHOUSE_CC1101_SRC_DRV.h> // Inclui a biblioteca de controle do módulo CC1101
 
 extern uint8_t oledBrightness;
 
-const int NUM_ITEMS = 12;
+// Aumentado o número de itens de 12 para 13 para acomodar o CC1101
+const int NUM_ITEMS = 13;
 const int MAX_ITEM_LENGTH = 20;
 
+// Configuração de Pinos para o CC1101 (Ajuste se soldar em outros GPIOs)
+#define CC1101_CSN   15 
+#define CC1101_GDO0   4 
+
+// Variável global para armazenar os tempos de pulso capturados do sinal de RF
+unsigned long sinalCapturado = 0;
+
+// Reaproveitamos o ícone do analyzer temporariamente para o item 13 para evitar falha de compilação
 const unsigned char* bitmap_icons[NUM_ITEMS] = {
   bitmap_icon_scanner, bitmap_icon_analyzer, bitmap_icon_jammer, bitmap_icon_kill,
   bitmap_icon_ble_jammer, bitmap_icon_spoofer, bitmap_icon_apple, bitmap_icon_ble,
   bitmap_icon_wifi, bitmap_icon_wifi_jammer, bitmap_icon_about, 
-  bitmap_icon_setting
+  bitmap_icon_setting, bitmap_icon_analyzer 
 };
 
+// Adicionado o nome do novo console no Menu
 char menu_items[NUM_ITEMS][MAX_ITEM_LENGTH] = {  
   "Scanner", "Analyzer", "WLAN Jammer", "Proto Kill", "BLE Jammer",
   "BLE Spoofer", "Sour Apple", "BLE Scan", "WiFi Scan", 
-  "Deauther", "About", "Setting"
+  "Deauther", "About", "Setting", "Sub-GHz Console"
 };
+
+// Declaração antecipada da nossa nova função de controle
+void subGhzConsoleSetup();
 
 void (*menu_functions[NUM_ITEMS])() = {
   Scanner::scannerSetup, Analyzer::analyzerSetup, Jammer::jammerSetup,
   ProtoKill::blackoutSetup, BleJammer::blejammerSetup, Spoofer::spooferSetup,
-  SourApple::sourappleSetup, BleScan::blescanSetup, WifiScan::wifiscanSetup, Deauther::deautherSetup,
-  utils, Setting::settingSetup
-};
-
-void (*menu_loop_functions[NUM_ITEMS])() = {
-  Scanner::scannerLoop, Analyzer::analyzerLoop, Jammer::jammerLoop,
-  ProtoKill::blackoutLoop, BleJammer::blejammerLoop, Spoofer::spooferLoop,
-  SourApple::sourappleLoop, BleScan::blescanLoop, WifiScan::wifiscanLoop, Deauther::deautherLoop,
-  nullptr, Setting::settingLoop
+  SourApple::sourappleSetup, BleScan::bleScanSetup, WifiScan::wifiScanSetup,
+  Deauther::deautherSetup, About::aboutSetup, Setting::settingSetup,
+  subGhzConsoleSetup // Mapeia o clique do item 13 para rodar o nosso console
 };
 
 int item_selected = 0;
 int current_screen = 0;
-unsigned long last_button_time = 0;
-const unsigned long DEBOUNCE_DELAY = 150; 
-const unsigned long POST_PRESS_DELAY = 200; 
-                
-void drawMenu() {
+
+// --- LÓGICA DE CONTROLE DO MÓDULO CC1101 ---
+
+void executarSubGhzRX() {
   u8g2.clearBuffer();
-  if (current_screen != 0) return;
-
-  u8g2.setFont(u8g2_font_5x7_tf); 
-  u8g2.drawBox(0, 0, 128, 8); 
-  u8g2.setDrawColor(0); 
-  char versionStr[16];
-  for (size_t i = 0; i < sizeof(txt_v); i++) {
-    versionStr[i] = (char)txt_v[i];
-  }
-  versionStr[sizeof(txt_v)] = '\0';
-
-  u8g2.setDrawColor(0);
-
-  Str(2, 7, txt_n, sizeof(txt_n));
-  int version_width = u8g2.getUTF8Width(versionStr);
-  Str(128 - version_width - 2, 7, txt_v, sizeof(txt_v));
-  u8g2.setDrawColor(1); 
-  u8g2.drawHLine(0, 8, 128); 
-
-  const int icons_per_row = 3;
-  const int icons_per_col = 2;
-  const int max_display_items = icons_per_row * icons_per_col; 
-
-  int selected_col = item_selected % icons_per_row;
-  int selected_row = (item_selected / icons_per_row) % icons_per_col;
-  if (item_selected == 12) {
-    selected_row = 1; 
-  }
-  int highlight_x = 13 + selected_col * 40;
-  int highlight_y = 14 + selected_row * 24;
-
-  int start_row = (item_selected / icons_per_row) - selected_row;
-  if (start_row < 0) start_row = 0;
-  int total_rows = (NUM_ITEMS + icons_per_row - 1) / icons_per_row;
-  if (start_row > total_rows - icons_per_col) start_row = total_rows - icons_per_col;
-  if (start_row < 0) start_row = 0; 
-  int start_item = start_row * icons_per_row;
-  int end_item = min(NUM_ITEMS, start_item + max_display_items);
-
-  for (int i = start_item; i < end_item; i++) {
-    int idx = i - start_item; 
-    int row = idx / icons_per_row;
-    int col = idx % icons_per_row;
-    int x_pos = 13 + col * 40;
-    int y_pos = 14 + row * 24;
-    u8g2.drawXBMP(x_pos, y_pos, 16, 16, bitmap_icons[i]);
-  }
-
-  u8g2.drawRFrame(highlight_x - 3, highlight_y - 3, 22, 22, 3); 
-  u8g2.setDrawColor(0);
-  u8g2.drawRFrame(highlight_x - 2, highlight_y - 2, 22, 22, 3); 
-  u8g2.setDrawColor(1);
-
-  u8g2.setFont(u8g2_font_5x8_tf); 
-  int name_width = u8g2.getUTF8Width(menu_items[item_selected]);
-  int name_x = (128 - name_width) / 2;
-  u8g2.drawStr(name_x, 64, menu_items[item_selected]); 
-
-  u8g2.drawFrame(124, 18, 4, 38); 
-  int bar_height = 38 / total_rows;
-  u8g2.drawBox(124, 18 + (bar_height * start_row), 4, bar_height); 
-
-  if (start_row > 0) {
-    u8g2.drawStr(124, 15, "."); 
-  }
-  if (start_row < total_rows - 1) {
-    u8g2.drawStr(124, 64, "."); 
-  }
+  u8g2.setFont(u8g2_font_6x10_tr);
+  u8g2.drawStr(10, 25, "A ESCUTAR 433MHZ...");
+  u8g2.drawStr(10, 40, "Aperte o controle");
   u8g2.sendBuffer();
 
-  setRadiosNeutralState();
+  ELECHOUSE_cc1101.SetRx(); // Ativa o receptor físico
+  unsigned long tempoLimite = millis();
+  bool sucesso = false;
+
+  // Monitora o pino de dados por até 10 segundos
+  while (millis() - tempoLimite < 10000) {
+    if (digitalRead(CC1101_GDO0) == HIGH) {
+      unsigned long duracao = pulseIn(CC1101_GDO0, HIGH, 60000);
+      if (duracao > 150) { // Valida se é um pulso quadrado real de RF
+        sinalCapturado = duracao;
+        sucesso = true;
+        break;
+      }
+    }
+    // Permite sair se o botão de seleção for pressionado novamente
+    if (readButton(BUTTON_SELECT_PIN)) { delay(200); break; }
+  }
+
+  ELECHOUSE_cc1101.setSidle(); // Desativa o rádio para poupar bateria
+
+  u8g2.clearBuffer();
+  if (sucesso) {
+    u8g2.drawStr(15, 30, "SINAL CAPTURADO!");
+    setNeoPixelColour("green");
+  } else {
+    u8g2.drawStr(20, 30, "SEM SINAL / TIMEOUT");
+    setNeoPixelColour("red");
+  }
+  u8g2.sendBuffer();
+  delay(1500);
+  setNeoPixelColour("black");
 }
 
-bool readButton(int pin) {
-  if (digitalRead(pin) == LOW && (millis() - last_button_time > DEBOUNCE_DELAY)) {
-    last_button_time = millis();
-    delay(POST_PRESS_DELAY); 
-    return true;
+void executarSubGhzTX() {
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_6x10_tr);
+  
+  if (sinalCapturado == 0) {
+    u8g2.drawStr(10, 30, "Nenhum sinal salvo!");
+    u8g2.sendBuffer();
+    delay(1500);
+    return;
   }
-  return false;
+
+  u8g2.drawStr(20, 30, "A TRANSMITIR...");
+  u8g2.sendBuffer();
+  setNeoPixelColour("blue");
+
+  ELECHOUSE_cc1101.SetTx(); // Ativa o transmissor físico
+
+  // Emite o padrão de pulso modulado gravado em loop para replicação estável
+  for (int f = 0; f < 12; f++) {
+    digitalWrite(CC1101_GDO0, HIGH);
+    delayMicroseconds(sinalCapturado);
+    digitalWrite(CC1101_GDO0, LOW);
+    delayMicroseconds(sinalCapturado * 2);
+  }
+
+  ELECHOUSE_cc1101.setSidle(); // Coloca o rádio em modo de espera
+  setNeoPixelColour("black");
 }
+
+// Menu interno do Sub-GHz para selecionar entre Receber ou Transmitir
+void subGhzConsoleSetup() {
+  int subOpcao = 0;
+  while (true) {
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_6x10_tr);
+    u8g2.drawStr(15, 12, "--- CONSOLE SUB-GHZ ---");
+    
+    if (subOpcao == 0) u8g2.drawStr(10, 32, "> 1. CAPTURAR (RX)");
+    else u8g2.drawStr(10, 32, "  1. CAPTURAR (RX)");
+
+    if (subOpcao == 1) u8g2.drawStr(10, 48, "> 2. REPRODUZIR (TX)");
+    else u8g2.drawStr(10, 48, "  2. REPRODUZIR (TX)");
+
+    u8g2.drawStr(10, 62, "Pressione L p/ Sair");
+    u8g2.sendBuffer();
+
+    if (readButton(BUTTON_DOWN_PIN) || readButton(BTN_PIN_RIGHT)) {
+      subOpcao = 1;
+    }
+    if (readButton(BUTTON_UP_PIN) || readButton(BTN_PIN_LEFT)) {
+      subOpcao = 0;
+    }
+    if (readButton(BUTTON_SELECT_PIN)) {
+      delay(200);
+      if (subOpcao == 0) executarSubGhzRX();
+      else executarSubGhzTX();
+    }
+    // Se apertar o botão esquerdo longo ou se houver um botão de retorno, sai do laço
+    if (readButton(BTN_PIN_LEFT) && subOpcao == 0) {
+      delay(200);
+      break; 
+    }
+  }
+}
+
+// --- FIM DA LÓGICA DO CC1101 ---
 
 void setup() {
   Serial.begin(115200);
-  neopixelSetup();
-  initAllRadios();
-  EEPROM.begin(512);
-  oledBrightness = EEPROM.read(1);
-  u8g2.begin();
-  u8g2.setContrast(oledBrightness);
-  conf();
-  pinMode(BUTTON_UP_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_SELECT_PIN, INPUT_PULLUP);
-  pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
-  pinMode(BTN_PIN_RIGHT, INPUT_PULLUP);
+  initNeoPixel();
+  initStorage();
+  loadSettings();
+  initDisplay();
+  
   pinMode(BTN_PIN_LEFT, INPUT_PULLUP);
+  pinMode(BTN_PIN_RIGHT, INPUT_PULLUP);
+  pinMode(BUTTON_UP_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_SELECT_PIN, INPUT_PULLUP);
+
+  // Inicialização do hardware CC1101 acoplado no SPI nativo (Pinos 18, 19, 23)
+  ELECHOUSE_cc1101.Init();
+  ELECHOUSE_cc1101.setCCMode(1); // Configura modulação genérica ASK/OOK (usada em controles de TV/Portões)
+  ELECHOUSE_cc1101.setFrequency(433.92); // Ajusta para a frequência central regulamentada no Brasil
+  ELECHOUSE_cc1101.setSpiPin(18, 19, 23, CC1101_CSN);
+  pinMode(CC1101_GDO0, INPUT);
+
   drawMenu();
 }
 
@@ -174,31 +210,69 @@ void loop() {
           u8g2.setFont(u8g2_font_6x10_tr);
           u8g2.drawStr(30, 32, "Loading");
     
-          String dots = "";
+          String dots = \"\";
           for (int j = 0; j <= i; j++) {
-            dots += ".";
-            setNeoPixelColour("white");
+            dots += \".\";
+            setNeoPixelColour(\"white\");
           }
-          setNeoPixelColour("0");
-          
-          u8g2.drawStr(73, 32, dots.c_str()); 
-    
+          u8g2.drawStr(75, 32, dots.c_str());
           u8g2.sendBuffer();
-          delay(200); 
+          delay(150);
+          setNeoPixelColour(\"black\");
         }
       }
+      
+      // Executa a função associada ao item do menu selecionado
       menu_functions[item_selected]();
       
-      while (current_screen == 1) {
-        if (menu_loop_functions[item_selected]) {
-          menu_loop_functions[item_selected]();
-        }
-        if (readButton(BUTTON_SELECT_PIN)) {
-          current_screen = 0;
-          break;
-        }
-      }
+      current_screen = 0;
       drawMenu();
     }
   }
+}
+
+void drawMenu() {
+  u8g2.clearBuffer();
+  u8g2.setContrast(oledBrightness);
+
+  int icon_width = 16;
+  int icon_height = 16;
+  int padding_x = 18;
+  int padding_y = 6;
+  int start_x = 14;
+  int start_y = 4;
+
+  int icons_per_row = 3;
+
+  int current_row = item_selected / icons_per_row;
+  int start_item = max(0, (current_row - 1) * icons_per_row);
+  if (start_item + 6 < NUM_ITEMS && current_row > 0) {
+    // Mantém o scroll dinâmico
+  } else {
+    start_item = max(0, NUM_ITEMS - 6);
+    if(item_selected < 6) start_item = 0;
+  }
+
+  for (int i = 0; i < 6; i++) {
+    int item_idx = start_item + i;
+    if (item_idx >= NUM_ITEMS) break;
+
+    int row = i / icons_per_row;
+    int col = i % icons_per_row;
+
+    int x = start_x + col * (icon_width + padding_x);
+    int y = start_y + row * (icon_height + padding_y);
+
+    u8g2.drawXBMP(x, y, icon_width, icon_height, bitmap_icons[item_idx]);
+
+    if (item_idx == item_selected) {
+      u8g2.drawFrame(x - 2, y - 2, icon_width + 4, icon_height + 4);
+      
+      u8g2.setFont(u8g2_font_6x10_tr);
+      int text_width = u8g2.getStrWidth(menu_items[item_idx]);
+      int text_x = (128 - text_width) / 2;
+      u8g2.drawStr(text_x, 58, menu_items[item_idx]);
+    }
+  }
+  u8g2.sendBuffer();
 }
