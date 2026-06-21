@@ -17,6 +17,9 @@
 #include <Update.h>
 #include <SPI.h>
 
+// Inclusão da biblioteca do módulo CC1101 de forma genérica
+#include <ELECHOUSE_CC1101_SRC_Arduino.h>
+
 void neopixelSetup();
 void neopixelLoop();
 
@@ -26,8 +29,7 @@ void flash(int numberOfFlashes, const std::vector<std::string>& colors, const st
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 extern Adafruit_NeoPixel pixels;
 
-//extern bool neoPixelActive;
-
+// Configurações globais estáveis
 bool neoPixelActive = false;
 uint8_t oledBrightness = 100;
 
@@ -36,7 +38,6 @@ extern RF24 RadioB;
 extern RF24 RadioC;
 
 void configureNrf(RF24 &radio);
-
 void setRadiosNeutralState();
 
 void setupRadioA();
@@ -44,6 +45,9 @@ void setupRadioB();
 void setupRadioC();
 
 void initAllRadios();
+
+// Declaração da função estrutural para inicializar o CC1101 no sistema
+void initCC1101Module();
 
 void Str(uint8_t x, uint8_t y, const uint8_t* asciiArray, size_t len);
 void CenteredStr(uint8_t screenWidth, uint8_t y, const uint8_t* asciiArray, size_t len, const uint8_t* font);
