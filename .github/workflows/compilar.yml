@@ -31,20 +31,27 @@ jobs:
           mkdir -p nRFBox/src
           
           # 2. Busca e copia TODOS os arquivos de código de qualquer lugar para nRFBox/src/
-          # (Isso evita o erro de "Nada para compilar")
           find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" \) -not -path "*/.pio/*" -exec cp {} nRFBox/src/ \; 2>/dev/null || true
           
-          # 3. Garante que o arquivo platformio.ini principal vá para a pasta nRFBox
+          # 3. Resolve o problema do acento (ícone.h -> icone.h) tanto no arquivo quanto no código
+          cd nRFBox/src
+          if [ -f "ícone.h" ]; then
+            mv "ícone.h" "icone.h"
+          fi
+          # Substitui a chamada no código de "ícone.h" para "icone.h" para o Linux aceitar
+          sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
+          cd ../..
+          
+          # 4. Garante que o arquivo platformio.ini principal vá para a pasta nRFBox
           if [ -f "platformio.ini" ]; then
             cp platformio.ini nRFBox/
           fi
           
-          # 4. Mostra o que tem na pasta para termos certeza antes de compilar
-          echo "=== Arquivos encontrados para compilar ==="
-          ls -la nRFBox/src/
-          
-          # 5. Entra na pasta e roda a compilação
+          # 5. Adiciona a biblioteca U8g2 que está faltando diretamente via comando
           cd nRFBox
+          pio lib install "olikraus/U8g2"
+          
+          # 6. Roda a compilação final
           pio run
 
       - name: Guardar o arquivo compilado (.BIN)
