@@ -27,33 +27,39 @@ jobs:
 
       - name: Preparar e Compilar o Projeto
         run: |
-          echo ">>> 1. Limpando ambiente e criando estrutura nativa plana..."
+          echo ">>> 1. Limpando ambiente..."
           rm -rf pio_workspace
           mkdir -p pio_workspace/src
           
-          echo ">>> 2. Copiando todos os arquivos de código do seu projeto para a pasta src..."
+          # A pasta lib/ resolve o problema dos includes com < >
+          mkdir -p pio_workspace/lib/CC1101
+          
+          echo ">>> 2. Copiando código do projeto..."
           find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" -o -name "*.INO" \) -not -path "*/.pio/*" -not -path "*/pio_workspace/*" -exec cp {} pio_workspace/src/ \; 2>/dev/null || true
           
-          echo ">>> 3. BAIXANDO E INJETANDO O CC1101 DIRETO DENTRO DE SRC..."
-          # Força o download da biblioteca e joga os arquivos físicos na mesma pasta do seu código
-          curl -sSL https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/archive/refs/tags/v2.5.7.tar.gz | tar -xzf - -C pio_workspace/src/ --strip-components=1
+          echo ">>> 3. Baixando e instalando CC1101 na pasta de bibliotecas locais (lib/)..."
+          curl -sSL https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/archive/refs/tags/v2.5.7.tar.gz | tar -xzf - -C pio_workspace/lib/CC1101 --strip-components=1
           
-          echo ">>> 4. Ajustando o icone.h para o Linux não reclamar de acentos..."
+          echo ">>> 4. Convertendo INO para main.cpp ANTES de corrigir os textos..."
           cd pio_workspace/src
-          find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
-          cp *cone*.h icone.h 2>/dev/null || true
-          sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
-          
-          echo ">>> 5. Convertendo o arquivo principal .ino para main.cpp..."
           LOCAL_INO=$(find . -maxdepth 1 -iname "*.ino" | head -n 1)
           if [ -n "$LOCAL_INO" ]; then
             echo '#include <Arduino.h>' > main.cpp
             cat "$LOCAL_INO" >> main.cpp
             rm "$LOCAL_INO"
           fi
+          
+          echo ">>> 5. Blindando a inclusão do icone.h em todos os arquivos gerados..."
+          find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
+          cp *cone*.h icone.h 2>/dev/null || true
+          
+          # Remove os acentos do código agora que o main.cpp já existe
+          sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
+          sed -i 's/<ícone.h>/<icone.h>/g' * 2>/dev/null || true
+          sed -i 's/"icon.h"/"icone.h"/g' * 2>/dev/null || true
           cd ../..
           
-          echo ">>> 6. Criando platformio.ini definitivo com sinalizador de inclusão local..."
+          echo ">>> 6. Configurando platformio.ini com LDF Deep+..."
           cat << 'EOF' > pio_workspace/platformio.ini
           [env:esp32dev]
           platform = espressif32
@@ -61,8 +67,8 @@ jobs:
           framework = arduino
           monitor_speed = 115200
           
-          # Explica para o compilador que a pasta src/ deve ser varrida para includes globais <...>
-          build_flags = -Isrc
+          # Força o compilador a escanear a pasta lib/ e seus arquivos locais até achar as dependências
+          lib_ldf_mode = deep+
           
           lib_deps =
               olikraus/U8g2 @ ^2.36.18
@@ -70,7 +76,7 @@ jobs:
               nrf24/RF24 @ ^1.6.1
           EOF
           
-          echo ">>> 7. Executando a compilação final..."
+          echo ">>> 7. Compilando..."
           cd pio_workspace
           pio run
           
