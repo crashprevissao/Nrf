@@ -27,20 +27,24 @@ jobs:
 
       - name: Preparar e Compilar o Projeto
         run: |
-          echo ">>> 1. Limpando ambiente e criando estrutura nativa..."
+          echo ">>> 1. Limpando ambiente e criando estrutura nativa plana..."
           rm -rf pio_workspace
           mkdir -p pio_workspace/src
           
-          echo ">>> 2. Copiando todos os arquivos de código do projeto para a pasta src..."
+          echo ">>> 2. Copiando todos os arquivos de código do seu projeto para a pasta src..."
           find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.ino" -o -name "*.INO" \) -not -path "*/.pio/*" -not -path "*/pio_workspace/*" -exec cp {} pio_workspace/src/ \; 2>/dev/null || true
           
-          echo ">>> 3. Ajustando o icone.h para o Linux não reclamar de acentos..."
+          echo ">>> 3. BAIXANDO E INJETANDO O CC1101 DIRETO DENTRO DE SRC..."
+          # Força o download da biblioteca e joga os arquivos físicos na mesma pasta do seu código
+          curl -sSL https://github.com/LSatan/SmartRC-CC1101-Driver-Lib/archive/refs/tags/v2.5.7.tar.gz | tar -xzf - -C pio_workspace/src/ --strip-components=1
+          
+          echo ">>> 4. Ajustando o icone.h para o Linux não reclamar de acentos..."
           cd pio_workspace/src
           find . -maxdepth 1 -type f -name "*.h" ! -name "icone.h" -exec grep -qE "unsigned char|static const" {} \; -exec cp {} icone.h \; 2>/dev/null || true
           cp *cone*.h icone.h 2>/dev/null || true
           sed -i 's/"ícone.h"/"icone.h"/g' * 2>/dev/null || true
           
-          echo ">>> 4. Convertendo o arquivo principal .ino para main.cpp..."
+          echo ">>> 5. Convertendo o arquivo principal .ino para main.cpp..."
           LOCAL_INO=$(find . -maxdepth 1 -iname "*.ino" | head -n 1)
           if [ -n "$LOCAL_INO" ]; then
             echo '#include <Arduino.h>' > main.cpp
@@ -49,7 +53,7 @@ jobs:
           fi
           cd ../..
           
-          echo ">>> 5. Criando platformio.ini definitivo com busca profunda de bibliotecas..."
+          echo ">>> 6. Criando platformio.ini definitivo com sinalizador de inclusão local..."
           cat << 'EOF' > pio_workspace/platformio.ini
           [env:esp32dev]
           platform = espressif32
@@ -57,18 +61,16 @@ jobs:
           framework = arduino
           monitor_speed = 115200
           
-          # Força o PlatformIO a escanear todos os arquivos locais (.h e .cpp) atrás de includes escondidos
-          lib_ldf_mode = deep+
+          # Explica para o compilador que a pasta src/ deve ser varrida para includes globais <...>
+          build_flags = -Isrc
           
-          # Todas as bibliotecas necessárias declaradas corretamente
           lib_deps =
               olikraus/U8g2 @ ^2.36.18
               adafruit/Adafruit NeoPixel @ ^1.15.5
               nrf24/RF24 @ ^1.6.1
-              https://github.com/LSatan/SmartRC-CC1101-Driver-Lib.git
           EOF
           
-          echo ">>> 6. Executando a compilação final..."
+          echo ">>> 7. Executando a compilação final..."
           cd pio_workspace
           pio run
           
